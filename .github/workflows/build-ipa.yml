@@ -1,0 +1,58 @@
+name: Build DDTank VN iOS (.ipa)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: "Link server DDTank VN (VD: https://xxx.trycloudflare.com/play)"
+        required: false
+        default: "https://passes-objective-port-discussions.trycloudflare.com/play"
+
+jobs:
+  build-ipa:
+    runs-on: macos-15
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Inject custom server URL (if provided)
+        if: ${{ inputs.server_url != '' }}
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :DDTankDefaultServerURL ${{ inputs.server_url }}" Sources/Info.plist
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build unsigned iOS app (arm64)
+        run: |
+          xcodebuild \
+            -project DDTankVN.xcodeproj \
+            -scheme DDTankVN \
+            -configuration Release \
+            -sdk iphoneos \
+            -arch arm64 \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CONFIGURATION_BUILD_DIR="$PWD/build" \
+            clean build
+
+      - name: Package DDTankVN.ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/DDTankVN.app Payload/DDTankVN.app
+          zip -r -y DDTankVN.ipa Payload
+          ls -lh DDTankVN.ipa
+
+      - name: Upload DDTankVN.ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DDTankVN-iOS-IPA
+          path: DDTankVN.ipa
+          retention-days: 30
